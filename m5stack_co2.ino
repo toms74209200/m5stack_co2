@@ -101,7 +101,7 @@ void loop() {
             }
 
     // Interval
-        delay(60000);
+        delay(60000UL);
         }
     }
 }
