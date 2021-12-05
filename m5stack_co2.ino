@@ -9,30 +9,32 @@
  * http://opensource.org/licenses/mit-license.php
  */
 
+#include <vector>
+
 #include <M5Stack.h>
+
+#include "DigitalFilter.h"
 #include "src/TimeUtil/TimeUtil.h"
 #include "src/MHZ19B_Controller/MHZ19B_Controller.h"
 
 constexpr auto RX_PIN = 1;
 constexpr auto TX_PIN = 0;
-constexpr auto LCD_HIGHT = 240;
+constexpr auto LCD_HEIGHT = 240;
 constexpr auto LCD_WIDTH = 320;
+constexpr uint16_t CHART_DATA_OFFSET = 20;
+constexpr uint16_t CHART_DATA_HEIGHT = LCD_HEIGHT - CHART_DATA_OFFSET;
+constexpr uint16_t CHART_DATA_MIN = 350;
+constexpr uint16_t CHART_DATA_MAX = 3000;
 
 constexpr unsigned long INTERVAL = time_util::Minutes::toMillis(1);
 
 #define DAT_AVE_NUM 16
 
 co2::MHZ19B_Controller co2_controller;
+std::vector<uint16_t> co2_data_vector(LCD_WIDTH);
+uint8_t valid_data_pointer = LCD_WIDTH;
 
-void data_array_shift();
-
-int ary_dat[DAT_AVE_NUM];
-int *p_dat;
-int i,j,k;
-unsigned int sum;
-
-int ary_y[LCD_WIDTH];
-int end_point;
+filter::DigitalFilter diginal_filter;
 
 void setup() {
 // M5stack initialization
@@ -45,77 +47,50 @@ void setup() {
 
 // CO2 sensor initialization
     co2_controller.init();
-    int t = co2_controller.get_co2();
 
-    for(i=0;i<=DAT_AVE_NUM-1;i++) {
-        ary_dat[i] = t;
-        sum += t;
-    }
+    diginal_filter = filter::DigitalFilter(co2_controller.get_co2());
+
+    M5.update();
 }
 
 void loop() {
 
-    M5.update();
+    auto co2_data = co2_controller.get_co2();
+    auto filtered_data = diginal_filter.get_filtered_data(co2_data);
 
-    end_point = 0;
+    Serial.println(filtered_data);
 
-    while (1) {
+    M5.lcd.clear();
+    M5.Lcd.setCursor(10, 10);
+    M5.Lcd.print(filtered_data);
+    M5.Lcd.print("ppm");
 
-        p_dat = &ary_dat[0];
+    co2_data_vector.erase(co2_data_vector.begin());
+    co2_data_vector.push_back(filtered_data);
 
-        for (i=0;i<=DAT_AVE_NUM-1;i++) {
-        // Average
-            sum -= *p_dat;
-            *p_dat = co2_controller.get_co2();
-            sum += *p_dat;
-            int dat_ave = sum >> 4;
-            p_dat++;
-
-        //Serial output
-            Serial.println(dat_ave,DEC);
-        
-        // LCD data print
-            M5.lcd.clear();
-            M5.Lcd.setCursor(10, 10);
-            M5.Lcd.print(dat_ave);
-            M5.Lcd.print("ppm");
-
-        // LCD graph print
-            ary_y[0] = LCD_HIGHT - (dat_ave >> 4);
-
-            for (j=0;j<LCD_WIDTH;j++) {
-                if (j < end_point) {
-                    if (j > 0) {
-                        M5.Lcd.drawLine(LCD_WIDTH-(j+2), ary_y[j], LCD_WIDTH-(j+1), ary_y[j-1], WHITE);
-                    } else {
-                        M5.Lcd.drawLine(LCD_WIDTH-(j+1), ary_y[j], LCD_WIDTH-(j+1), ary_y[j], WHITE);
-                    }
-                    if (j == end_point-1) {
-                        data_array_shift();
-                    }
-                } else if (j == end_point) {
-                    if (end_point == LCD_WIDTH) {
-                        data_array_shift();
-                    }
-                } else {
-                    if (end_point > 0) {
-                        data_array_shift();
-                    } else {
-                        ary_y[j] = ary_y[j-1];
-                    }
-                    end_point = j;
-                    break;
-                }
-            }
-
-    // Interval
-        delay(INTERVAL);
+    if (valid_data_pointer == 0) {
+        for (uint8_t i = 1; i < LCD_WIDTH; i++) {
+            plot_data(i - 1, i, co2_data_vector[i-1], co2_data_vector[i]);
         }
+    } else {
+        for (uint8_t i = valid_data_pointer; i < LCD_WIDTH; i++) {
+            plot_data(i - 1, i, co2_data_vector[i-1], co2_data_vector[i]);
+        }
+        valid_data_pointer--;
     }
+
+    delay(INTERVAL);
 }
 
-void data_array_shift() {
-    for (k=0;k<end_point;k++) {
-        ary_y[end_point-k] = ary_y[end_point-(k+1)];
-    }
+/**
+ * @brief plot a pair data
+ * @param[in] display_x0 1st position of the pair
+ * @param[in] display_x1 2nd position of the pair
+ * @param[in] data0 1st data of the pair
+ * @param[in] data1 1nd data of the pair
+ */
+void plot_data(uint16_t display_x0, uint16_t display_x1, uint16_t data0, uint16_t data1) {
+  uint16_t display_y0 = LCD_HEIGHT + (((data0 - CHART_DATA_MIN) * CHART_DATA_OFFSET) / CHART_DATA_MAX) - (((data0 - CHART_DATA_MIN) * CHART_DATA_HEIGHT) / CHART_DATA_MAX);
+  uint16_t display_y1 = LCD_HEIGHT + (((data1 - CHART_DATA_MIN) * CHART_DATA_OFFSET) / CHART_DATA_MAX) - (((data1 - CHART_DATA_MIN) * CHART_DATA_HEIGHT) / CHART_DATA_MAX);
+  M5.Lcd.drawLine(display_x0, display_y0, display_x1, display_y1, WHITE);
 }
