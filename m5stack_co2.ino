@@ -10,11 +10,16 @@
  */
 
 #include <M5Stack.h>
-#include "mhz19b_uart.h"
+#include "src/MHZ19B_Controller/MHZ19B_Controller.h"
+
+constexpr auto RX_PIN = 1;
+constexpr auto TX_PIN = 0;
+constexpr auto LCD_HIGHT = 240;
+constexpr auto LCD_WIDTH = 320;
 
 #define DAT_AVE_NUM 16
-#define LCD_HIGHT 240
-#define LCD_WIDTH 320
+
+co2::MHZ19B_Controller co2_controller;
 
 void data_array_shift();
 
@@ -36,8 +41,8 @@ void setup() {
     M5.Lcd.clear();
 
 // CO2 sensor initialization
-    init_co2();
-    int t = gets_co2_mid();
+    co2_controller.init();
+    int t = co2_controller.get_co2();
 
     for(i=0;i<=DAT_AVE_NUM-1;i++) {
         ary_dat[i] = t;
@@ -58,7 +63,7 @@ void loop() {
         for (i=0;i<=DAT_AVE_NUM-1;i++) {
         // Average
             sum -= *p_dat;
-            *p_dat = gets_co2_mid();
+            *p_dat = co2_controller.get_co2();
             sum += *p_dat;
             int dat_ave = sum >> 4;
             p_dat++;
