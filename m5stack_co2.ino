@@ -10,12 +10,15 @@
  */
 
 #include <M5Stack.h>
+#include "src/TimeUtil/TimeUtil.h"
 #include "src/MHZ19B_Controller/MHZ19B_Controller.h"
 
 constexpr auto RX_PIN = 1;
 constexpr auto TX_PIN = 0;
 constexpr auto LCD_HIGHT = 240;
 constexpr auto LCD_WIDTH = 320;
+
+constexpr unsigned long INTERVAL = time_util::Minutes::toMillis(1);
 
 #define DAT_AVE_NUM 16
 
@@ -106,7 +109,7 @@ void loop() {
             }
 
     // Interval
-        delay(60000UL);
+        delay(INTERVAL);
         }
     }
 }
